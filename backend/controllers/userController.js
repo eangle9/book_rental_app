@@ -1,6 +1,12 @@
 const asyncHandler = require("express-async-handler");
 const bcrypt = require("bcrypt");
 const pool = require("../config/db");
+const generateToken = require("../utils/generateToken");
+
+const matchPassword = async (password, hashPassword) => {
+  const isMatch = await bcrypt.compare(password, hashPassword);
+  return isMatch;
+};
 
 const registerUser = asyncHandler(async (req, res) => {
   const { username, password, email, role } = req.body;
@@ -31,4 +37,32 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 });
 
-module.exports = { registerUser };
+const authUser = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  const result = await pool.query(
+    "SELECT id, username, password, email FROM users WHERE email = $1",
+    [email]
+  );
+
+  if (result.rows.length > 0) {
+    const user = result.rows[0];
+    const isMatch = await matchPassword(password, user.password);
+    if (isMatch) {
+      res.status(200).json({
+        username: user.username,
+        email: user.email,
+        token: generateToken(user.id),
+      });
+    } else {
+      res.status(400);
+      throw new Error("invalid password");
+    }
+  } else {
+    res.status(400);
+    throw new Error("invalid email");
+  }
+
+  res.send("login");
+});
+
+module.exports = { registerUser, authUser };
